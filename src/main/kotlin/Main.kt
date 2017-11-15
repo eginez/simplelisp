@@ -9,8 +9,11 @@ val ValidFunctions = listOf('+', '-')
 val EmptyNode = ListNode(emptyList())
 val InvalidSyntax = RuntimeException("Invalid Syntax")
 
+
+class Environment(val map:MutableMap<String, Any>) : MutableMap<String, Any>  by map
+
 abstract class Node {
-    abstract fun eval(): Any
+    abstract fun eval(env: Environment): Any
 }
 
 
@@ -23,27 +26,83 @@ inline fun whileNotEOF(input: Reader, body: (Char)->Unit) {
 
 }
 abstract class FunctionNode(val name: String): Node() {
-    override fun eval(): Any = this
-    abstract fun apply(operands: List<Node>): Any
+    override fun eval(env: Environment): Any = this
+    abstract fun apply(operands: List<Node>, env: Environment): Any
+}
+
+class SymbolNode(val name: String): Node() {
+    override fun eval(env: Environment): Any = env.getOrDefault(name, EmptyNode)
 }
 
 class ListNode(val nodes: List<Node>) : Node() {
-    override fun eval(): Any {
-        val op = nodes[0] as FunctionNode
-        return op.apply(nodes.drop(1))
+    override fun eval(env: Environment): Any {
+        val op = nodes[0]
+        return when(op) {
+            is FunctionNode -> op.apply(nodes.drop(1), env)
+            is NumberNode -> op.eval(env)
+            is SymbolNode -> {
+                val newList  = mutableListOf<Node>()
+                newList += op.eval(env) as Node
+                newList += nodes.drop(1)
+                ListNode(newList).eval(env)
+            }
+            else -> EmptyNode
+        }
     }
 }
 
-class NumberNode(val number: Number): Node() {
-    override fun eval(): Any = this.number
+val DefineSymbol = object: FunctionNode("define") {
+    override fun apply(operands: List<Node>, env: Environment): Any {
+        assert(operands.size == 2)
+        val symbol = operands[0] as SymbolNode
+        env.put(symbol.name, operands[1])
+        return symbol
+    }
 }
 
+val DefineFunction = object: FunctionNode("fn") {
+    override fun apply(operands: List<Node>, env: Environment): Any {
+        val fnName = operands[0] as SymbolNode
+        val args = operands[1]
+        val body = operands[2]
+        val fn = object: FunctionNode(fnName.name) {
+            override fun apply(operands: List<Node>, env: Environment): Any {
+                assert(args is ListNode)
+
+                val fnEnv = Environment(env)
+                val formalParams = args as ListNode
+                formalParams.nodes.map { it as SymbolNode }
+                        .forEachIndexed { i, symbol -> fnEnv[symbol.name] = operands[i] }
+                return body.eval(fnEnv)
+            }
+        }
+        env.put(fnName.name, fn)
+        return fn
+    }
+}
+
+
+
+class NumberNode(val number: Number): Node() {
+    override fun eval(env: Environment): Any = this.number
+}
+
+
+//Recursively evaluates nodes until a primitive type is found
+fun fullyEval(node: Any, env: Environment): Any {
+    return if (node is Node && node != EmptyNode) {
+        fullyEval(node.eval(env), env)
+    } else {
+        node
+    }
+}
 
 fun readNode(input: Reader): Node {
     whileNotEOF(input) { c ->
         when (c) {
             '(' -> return readListNode(PushbackReader(input))
             in '0'..'9' -> return readNumberNode(PushbackReader(input))
+            in 'a'..'z' ->  return readSymbolNode(PushbackReader(input))
             in ValidFunctions -> return readFunctionNode(input)
             ' ' -> {}
             ')' -> throw InvalidSyntax
@@ -52,13 +111,14 @@ fun readNode(input: Reader): Node {
     return EmptyNode
 }
 
+
 fun readFunctionNode(input: Reader): FunctionNode {
     whileNotEOF(input) { c ->
         when(c) {
             '+' -> return object : FunctionNode("PLUS"){
-                override fun apply(operands: List<Node>): Any {
+                override fun apply(operands: List<Node>, env: Environment): Any {
                     var sum = 0
-                    operands.forEach { sum += it.eval() as Int }
+                    operands.forEach { sum += fullyEval(it, env) as Int }
                     return sum
                 }
             }
@@ -83,6 +143,20 @@ fun readNumberNode(input: PushbackReader): NumberNode {
     throw InvalidSyntax
 }
 
+fun readSymbolNode(input: PushbackReader): Node {
+    val symbol = StringBuilder()
+    whileNotEOF(input) { c ->
+        when(c) {
+            in 'a'..'z' -> symbol.append(c)
+            else -> {
+                input.unread(c.toInt())
+                return SymbolNode(symbol.toString())
+            }
+        }
+    }
+    throw InvalidSyntax
+}
+
 fun readListNode(input: PushbackReader): ListNode {
     val allNodes = mutableListOf<Node>()
     whileNotEOF(input) { c ->
@@ -97,11 +171,19 @@ fun readListNode(input: PushbackReader): ListNode {
                 input.unread(c.toInt())
                 allNodes.add(readNumberNode(input))
             }
+            in 'a'..'z' -> {
+                input.unread(c.toInt())
+                allNodes.add(readSymbolNode(input))
+            }
             ' ' -> {}
         }
     }
     throw InvalidSyntax
 }
+
+val InitEnv = mutableMapOf(
+        DefineSymbol.name to DefineSymbol,
+        DefineFunction.name to DefineFunction)
 
 fun main(args: Array<String>) {
     val buffReader = BufferedReader(InputStreamReader(System.`in`))
