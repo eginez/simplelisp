@@ -1,9 +1,5 @@
 import java.io.*
 
-/*
-Node = NumberNode | ListNode
-
-*/
 
 val ValidFunctions = listOf('+', '-')
 val EmptyNode = ListNode(emptyList())
@@ -12,7 +8,7 @@ val InvalidSyntax = RuntimeException("Invalid Syntax")
 
 class Environment(val map:MutableMap<String, Any>) : MutableMap<String, Any>  by map
 
-abstract class Node {
+sealed class Node {
     abstract fun eval(env: Environment): Any
 }
 
@@ -37,16 +33,16 @@ class SymbolNode(val name: String): Node() {
 class ListNode(val nodes: List<Node>) : Node() {
     override fun eval(env: Environment): Any {
         val op = nodes[0]
+        val symbolListClosure = { opr: Node ->
+            val newList = mutableListOf(opr.eval(env) as Node)
+            newList += nodes.drop(1)
+            ListNode(newList).eval(env)
+        }
         return when(op) {
             is FunctionNode -> op.apply(nodes.drop(1), env)
             is NumberNode -> op.eval(env)
-            is SymbolNode -> {
-                val newList  = mutableListOf<Node>()
-                newList += op.eval(env) as Node
-                newList += nodes.drop(1)
-                ListNode(newList).eval(env)
-            }
-            else -> EmptyNode
+            is SymbolNode  -> symbolListClosure(op)
+            is ListNode -> symbolListClosure(op)
         }
     }
 }
@@ -62,10 +58,9 @@ val DefineSymbol = object: FunctionNode("define") {
 
 val DefineFunction = object: FunctionNode("fn") {
     override fun apply(operands: List<Node>, env: Environment): Any {
-        val fnName = operands[0] as SymbolNode
-        val args = operands[1]
-        val body = operands[2]
-        val fn = object: FunctionNode(fnName.name) {
+        val args = operands[0]
+        val body = operands[1]
+        val fn = object: FunctionNode("") {
             override fun apply(operands: List<Node>, env: Environment): Any {
                 assert(args is ListNode)
 
@@ -76,7 +71,6 @@ val DefineFunction = object: FunctionNode("fn") {
                 return body.eval(fnEnv)
             }
         }
-        env.put(fnName.name, fn)
         return fn
     }
 }
@@ -104,7 +98,7 @@ fun readNode(input: Reader): Node {
             in '0'..'9' -> return readNumberNode(PushbackReader(input))
             in 'a'..'z' ->  return readSymbolNode(PushbackReader(input))
             in ValidFunctions -> return readFunctionNode(input)
-            ' ' -> {}
+            in listOf(' ', '\n') -> {}
             ')' -> throw InvalidSyntax
         }
     }
@@ -178,8 +172,17 @@ fun readListNode(input: PushbackReader): ListNode {
             ' ' -> {}
         }
     }
-    throw InvalidSyntax
+    return ListNode(allNodes)
 }
+
+fun readListNode(input: Reader): ListNode = readListNode(PushbackReader(input))
+
+fun evalAllNodes(nodes: List<Node>, env: Environment): Any? {
+    var out: Any? = null
+    nodes.forEach { out = it.eval(env) }
+    return out
+}
+
 
 val InitEnv = mutableMapOf(
         DefineSymbol.name to DefineSymbol,

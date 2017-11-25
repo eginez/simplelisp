@@ -38,7 +38,7 @@ class MainTest {
 
     @Test
     fun testSimpleDefn() {
-        val r = StringReader("(fn sum (x) (+ x 10))")
+        val r = StringReader("(fn (x) (+ x 10))")
         val n = readNode(r)
         val fnNode = n.eval(env)
         assert(fnNode is FunctionNode)
@@ -46,5 +46,29 @@ class MainTest {
         val res = fn.apply(listOf(NumberNode(10)), env)
         assert(res == 20)
 
+    }
+
+    @Test
+    fun test2Expressions() {
+        val expr = """ (define x 10)
+            (+ x 10)
+            """
+        val r = StringReader(expr)
+        val n = readListNode(r)
+        val res = evalAllNodes(n.nodes, env)
+        assert(res == 20)
+    }
+
+    @Test
+    fun testFibo() {
+        val expr = """
+(define sum (fn (x)
+                (+ x 10)))
+(sum 2)
+            """
+        val r = StringReader(expr)
+        val n = readListNode(r)
+        val res = evalAllNodes(n.nodes, env)
+        assert(res == 12)
     }
 }
