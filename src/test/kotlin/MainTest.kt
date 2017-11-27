@@ -60,7 +60,7 @@ class MainTest {
     }
 
     @Test
-    fun testFibo() {
+    fun testSum() {
         val expr = """
 (define sum (fn (x)
                 (+ x 10)))

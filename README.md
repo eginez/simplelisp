@@ -1,8 +1,8 @@
 # Simple Lisp
 Simple lisp is a toy lisp implementation that supports the bare minimum lisp constructs. Here is a simple program written in simpleplisp 
 ```
-(define sum (x)
-    (+ x 10))
+(define sum (fn (x)
+                (+ x 10)))
 
 (sum 10)
 ```
