@@ -1,5 +1,5 @@
 # Simple Lisp
-Simple lisp is a toy lisp implementation that supports the following constructs. Here is a simple program written in simpleplist
+Simple lisp is a toy lisp implementation that supports the bare minimum lisp constructs. Here is a simple program written in simpleplisp 
 ```
 (define sum (x)
     (+ x 10))
@@ -11,6 +11,8 @@ The above function evaluates to 20
 Simple lisp is built with Kotlin
 
 ## Building
-```gradle build test``
+```
+gradle build test
+``
 
 
